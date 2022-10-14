@@ -2,6 +2,7 @@ package internal
 
 import (
 	"context"
+	"encoding/binary"
 
 	"github.com/gorilla/websocket"
 	"google.golang.org/protobuf/proto"
@@ -71,16 +72,45 @@ func (s *WSSender) sendNextMessage() error {
 	return nil
 }
 
+// Message header is currently uint64 zero value.
+const wsMsgHeader = uint64(0)
+
 func (s *WSSender) sendMessage(msg *protobufs.AgentToServer) error {
 	data, err := proto.Marshal(msg)
 	if err != nil {
 		s.logger.Errorf("Cannot marshal data: %v", err)
 		return err
 	}
-	err = s.conn.WriteMessage(websocket.BinaryMessage, data)
+
+	writer, err := s.conn.NextWriter(websocket.BinaryMessage)
 	if err != nil {
 		s.logger.Errorf("Cannot send: %v", err)
 		// TODO: propagate error back to Client and reconnect.
+		return err
 	}
-	return err
+
+	// Encode header as a varint.
+	hdrBuf := make([]byte, binary.MaxVarintLen64)
+	n := binary.PutUvarint(hdrBuf, wsMsgHeader)
+	hdrBuf = hdrBuf[:n]
+
+	// Write the header bytes.
+	_, err = writer.Write(hdrBuf)
+	if err != nil {
+		s.logger.Errorf("Cannot send: %v", err)
+		// TODO: propagate error back to Client and reconnect.
+		writer.Close()
+		return err
+	}
+
+	// Write the encoded data.
+	_, err = writer.Write(data)
+	if err != nil {
+		s.logger.Errorf("Cannot send: %v", err)
+		// TODO: propagate error back to Client and reconnect.
+		writer.Close()
+		return err
+	}
+
+	return writer.Close()
 }

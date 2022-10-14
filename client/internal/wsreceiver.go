@@ -2,6 +2,8 @@ package internal
 
 import (
 	"context"
+	"encoding/binary"
+	"errors"
 	"fmt"
 
 	"github.com/gorilla/websocket"
@@ -62,12 +64,35 @@ out:
 	cancelFunc()
 }
 
+func decodeMessage(bytes []byte, msg *protobufs.ServerToAgent) error {
+	// Message header is optional until the end of grace period that ends Feb 1, 2023.
+	// Check if the header is present.
+	if len(bytes) > 0 && bytes[0] == 0 {
+		// New message format. The Protobuf message is preceded by a zero byte header.
+		// Skip the zero byte.
+		header, n := binary.Uvarint(bytes)
+		if header != wsMsgHeader {
+			return errors.New("unexpected non-zero header")
+		}
+		bytes = bytes[n:]
+	} else {
+		// Old message format. No header present.
+	}
+
+	// Decode WebSocket message as a Protobuf message.
+	err := proto.Unmarshal(bytes, msg)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 func (r *wsReceiver) receiveMessage(msg *protobufs.ServerToAgent) error {
 	_, bytes, err := r.conn.ReadMessage()
 	if err != nil {
 		return err
 	}
-	err = proto.Unmarshal(bytes, msg)
+	err = decodeMessage(bytes, msg)
 	if err != nil {
 		return fmt.Errorf("cannot decode received message: %w", err)
 	}

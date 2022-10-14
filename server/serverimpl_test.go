@@ -215,6 +215,12 @@ func TestServerReceiveSendMessage(t *testing.T) {
 	require.EqualValues(t, websocket.BinaryMessage, mt)
 
 	// Decode the response.
+
+	// Must start with a zero byte header.
+	require.EqualValues(t, 0, bytes[0])
+	// Skip header.
+	bytes = bytes[1:]
+
 	var response protobufs.ServerToAgent
 	err = proto.Unmarshal(bytes, &response)
 	require.NoError(t, err)
@@ -485,4 +491,36 @@ func TestServerHonoursAcceptEncoding(t *testing.T) {
 	assert.EqualValues(t, protobufs.ServerCapabilities_ServerCapabilities_AcceptsStatus, response.Capabilities)
 
 	eventually(t, func() bool { return atomic.LoadInt32(&onCloseCalled) == 1 })
+}
+
+func TestDecodeMessage(t *testing.T) {
+	msgsToTest := []*protobufs.AgentToServer{
+		{}, // Empty message
+		{
+			InstanceUid: "abcd",
+			SequenceNum: 123,
+		},
+	}
+
+	// Try with and without header byte. This is only necessary until the
+	// end of grace period that ends Feb 1, 2023. After that the header is
+	// no longer optional.
+	withHeaderTests := []bool{false, true}
+
+	for _, msg := range msgsToTest {
+		for _, withHeader := range withHeaderTests {
+			bytes, err := proto.Marshal(msg)
+			require.NoError(t, err)
+
+			if withHeader {
+				// Prepend zero header byte.
+				bytes = append([]byte{0}, bytes...)
+			}
+
+			decoded, err := decodeMessage(bytes)
+			require.NoError(t, err)
+
+			assert.True(t, proto.Equal(msg, decoded))
+		}
+	}
 }

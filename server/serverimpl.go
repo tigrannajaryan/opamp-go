@@ -173,6 +173,26 @@ func (s *server) httpHandler(w http.ResponseWriter, req *http.Request) {
 	go s.handleWSConnection(conn)
 }
 
+func decodeMessage(bytes []byte) (*protobufs.AgentToServer, error) {
+	// Message header is optional until the end of grace period that ends Feb 1, 2023.
+	// Check if the header is present.
+	if len(bytes) > 0 && bytes[0] == 0 {
+		// New message format. The Protobuf message is preceded by a zero byte header.
+		// Skip the zero byte.
+		bytes = bytes[1:]
+	} else {
+		// Old message format. No header present.
+	}
+
+	// Decode WebSocket message as a Protobuf message.
+	var request protobufs.AgentToServer
+	err := proto.Unmarshal(bytes, &request)
+	if err != nil {
+		return nil, err
+	}
+	return &request, nil
+}
+
 func (s *server) handleWSConnection(wsConn *websocket.Conn) {
 	agentConn := wsConnection{wsConn: wsConn}
 
@@ -213,15 +233,14 @@ func (s *server) handleWSConnection(wsConn *websocket.Conn) {
 		}
 
 		// Decode WebSocket message as a Protobuf message.
-		var request protobufs.AgentToServer
-		err = proto.Unmarshal(bytes, &request)
+		request, err := decodeMessage(bytes)
 		if err != nil {
 			s.logger.Errorf("Cannot decode message from WebSocket: %v", err)
 			continue
 		}
 
 		if s.settings.Callbacks != nil {
-			response := s.settings.Callbacks.OnMessage(agentConn, &request)
+			response := s.settings.Callbacks.OnMessage(agentConn, request)
 			if response.InstanceUid == "" {
 				response.InstanceUid = request.InstanceUid
 			}
