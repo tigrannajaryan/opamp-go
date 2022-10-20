@@ -75,42 +75,67 @@ func (s *WSSender) sendNextMessage() error {
 // Message header is currently uint64 zero value.
 const wsMsgHeader = uint64(0)
 
+const maxFragmentSizeBytes = 40 // Tiny max just for testing
+const hdrMsgContinues = 0x01    // Bitmask in the header to indicate that the message has a continuation
+
 func (s *WSSender) sendMessage(msg *protobufs.AgentToServer) error {
-	data, err := proto.Marshal(msg)
+	bytes, err := proto.Marshal(msg)
 	if err != nil {
 		s.logger.Errorf("Cannot marshal data: %v", err)
 		return err
 	}
 
-	writer, err := s.conn.NextWriter(websocket.BinaryMessage)
-	if err != nil {
-		s.logger.Errorf("Cannot send: %v", err)
-		// TODO: propagate error back to Client and reconnect.
-		return err
+	for {
+		var msgHeader uint64
+		var fragment []byte
+
+		if len(bytes) > maxFragmentSizeBytes {
+			// Slice a fragment from the bytes
+			fragment = bytes[:maxFragmentSizeBytes]
+			bytes = bytes[maxFragmentSizeBytes:]
+			msgHeader = msgHeader | hdrMsgContinues
+		} else {
+			fragment = bytes
+			bytes = nil
+		}
+
+		writer, err := s.conn.NextWriter(websocket.BinaryMessage)
+		if err != nil {
+			s.logger.Errorf("Cannot send: %v", err)
+			// TODO: propagate error back to Client and reconnect.
+			return err
+		}
+
+		// Encode header as a varint.
+		hdrBuf := make([]byte, binary.MaxVarintLen64)
+		n := binary.PutUvarint(hdrBuf, msgHeader)
+		hdrBuf = hdrBuf[:n]
+
+		// Write the header bytes.
+		_, err = writer.Write(hdrBuf)
+		if err != nil {
+			s.logger.Errorf("Cannot send: %v", err)
+			// TODO: propagate error back to Client and reconnect.
+			writer.Close()
+			return err
+		}
+
+		// Write the encoded data.
+		_, err = writer.Write(fragment)
+		if err != nil {
+			s.logger.Errorf("Cannot send: %v", err)
+			// TODO: propagate error back to Client and reconnect.
+			writer.Close()
+			return err
+		}
+
+		if err = writer.Close(); err != nil {
+			return err
+		}
+
+		if len(bytes) == 0 {
+			break
+		}
 	}
-
-	// Encode header as a varint.
-	hdrBuf := make([]byte, binary.MaxVarintLen64)
-	n := binary.PutUvarint(hdrBuf, wsMsgHeader)
-	hdrBuf = hdrBuf[:n]
-
-	// Write the header bytes.
-	_, err = writer.Write(hdrBuf)
-	if err != nil {
-		s.logger.Errorf("Cannot send: %v", err)
-		// TODO: propagate error back to Client and reconnect.
-		writer.Close()
-		return err
-	}
-
-	// Write the encoded data.
-	_, err = writer.Write(data)
-	if err != nil {
-		s.logger.Errorf("Cannot send: %v", err)
-		// TODO: propagate error back to Client and reconnect.
-		writer.Close()
-		return err
-	}
-
-	return writer.Close()
+	return nil
 }

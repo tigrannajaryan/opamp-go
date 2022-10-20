@@ -1,6 +1,7 @@
 package internal
 
 import (
+	"encoding/binary"
 	"io"
 	"log"
 	"net/http"
@@ -117,27 +118,42 @@ func (m *MockServer) handleWebSocket(t *testing.T, w http.ResponseWriter, r *htt
 		m.OnWSConnect(conn)
 	}
 	for {
-		var messageType int
 		var msgBytes []byte
-		if messageType, msgBytes, err = conn.ReadMessage(); err != nil {
-			return
-		}
-		assert.EqualValues(t, websocket.BinaryMessage, messageType)
+		for {
+			var messageType int
+			var fragment []byte
+			if messageType, fragment, err = conn.ReadMessage(); err != nil {
+				return
+			}
+			assert.EqualValues(t, websocket.BinaryMessage, messageType)
 
-		if len(msgBytes) > 0 && msgBytes[0] == 0 {
-			// New message format. The Protobuf message is preceded by a zero byte header.
-			// Skip the zero byte.
-			msgBytes = msgBytes[1:]
+			var msgHeader uint64
+			if len(fragment) > 0 {
+				var n int
+				msgHeader, n = binary.Uvarint(fragment)
+				if n <= 0 {
+					log.Fatal("Cannot decode message header")
+				}
+				fragment = fragment[n:]
+			} else {
+				log.Fatal("Message header is missing")
+			}
+
+			msgBytes = append(msgBytes, fragment...)
+
+			if msgHeader&hdrMsgContinues == 0 {
+				break
+			}
 		}
 
 		// We use alwaysRespond=false here because WebSocket requests must only have
 		// a response when a response is provided by the user-defined handler.
-		msgBytes = m.handleReceivedBytes(msgBytes, false)
-		if msgBytes != nil {
+		responseBytes := m.handleReceivedBytes(msgBytes, false)
+		if responseBytes != nil {
 			// Prepend zero-byte header.
-			msgBytes = append([]byte{0}, msgBytes...)
+			responseBytes = append([]byte{0}, responseBytes...)
 
-			err = conn.WriteMessage(websocket.BinaryMessage, msgBytes)
+			err = conn.WriteMessage(websocket.BinaryMessage, responseBytes)
 			if err != nil {
 				log.Fatal("cannot send:", err)
 			}
