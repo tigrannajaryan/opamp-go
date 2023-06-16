@@ -130,8 +130,6 @@ func (r *receivedProcessor) ProcessReceivedMessage(ctx context.Context, msg *pro
 
 		r.callbacks.OnMessage(ctx, msgData)
 
-		r.rcvOpampConnectionSettings(ctx, msg.ConnectionSettings)
-
 		if scheduled {
 			r.sender.ScheduleSend()
 		}
@@ -141,6 +139,14 @@ func (r *receivedProcessor) ProcessReceivedMessage(ctx context.Context, msg *pro
 	if err != nil {
 		r.processErrorResponse(err)
 	}
+
+	// Process OpAMP connection settings offer last. We do this last because in the callback
+	// a reasonable way to handle this is to disconnect the current OpAMP connection and try
+	// to connect using the new connection settings to see if the settings are correct.
+	// Since the current connection is disconnected everything else that we would want
+	// to send back to the server while processing the other callbacks needs to happen
+	// before the disconnection.
+	r.rcvOpampConnectionSettings(ctx, msg.ConnectionSettings)
 }
 
 func (r *receivedProcessor) hasCapability(capability protobufs.AgentCapabilities) bool {
