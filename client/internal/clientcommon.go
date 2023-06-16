@@ -27,12 +27,13 @@ var (
 	errReportsPackageStatusesNotSet = errors.New("ReportsPackageStatuses capability is not set")
 )
 
+// CallbacksWrapper wraps Callbacks such that it is possible to query if any callback
+// function is in progress (called, but not yet returned). This is necessary for
+// safe handling of certain ClientCommon methods when they are called from the callbacks.
+// See for example Stop() implementation.
 type CallbacksWrapper struct {
 	wrapped types.Callbacks
 	// Greater than zero if currently processing a callback.
-	// This is used for detecting that a method of a Client is called from a callback
-	// and helps avoid deadlocks, such as when Stop() is called while processing a
-	// received message.
 	inCallback *int64
 }
 
@@ -123,8 +124,7 @@ func (cc *CallbacksWrapper) InCallback() bool {
 // ClientCommon contains the OpAMP logic that is common between WebSocket and
 // plain HTTP transports.
 type ClientCommon struct {
-	Logger types.Logger
-
+	Logger    types.Logger
 	Callbacks *CallbacksWrapper
 
 	// Agent's capabilities defined at Start() time.
@@ -249,8 +249,9 @@ func (c *ClientCommon) Stop(ctx context.Context) error {
 
 	if c.Callbacks.InCallback() {
 		// Stop() is called from a callback. We cannot wait and block here
-		// because the c.stoppedSignal will not be set until the callback
-		// returns. So, for this case we return immediately and the caller
+		// because the c.stoppedSignal may not be set until the callback
+		// returns. This is the case for example when OnMessage callback is
+		// called. So, for this case we return immediately and the caller
 		// needs to be aware that Stop() does not wait for stopping to
 		// finish in this case.
 		return nil

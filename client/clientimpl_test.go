@@ -466,8 +466,10 @@ func TestIncludesDetailsOnReconnect(t *testing.T) {
 }
 
 func TestStopFromCallback(t *testing.T) {
-	callbacksToTest := []string{"connect", "opamp", "message"}
+	// This test verifies calling Stop() from a callback. We had a bug previously
+	// where Stop() would hang if called from a callback.
 
+	callbacksToTest := []string{"connect", "opamp", "message"}
 	for _, callbackToTest := range callbacksToTest {
 		t.Run(
 			callbackToTest, func(t *testing.T) {
