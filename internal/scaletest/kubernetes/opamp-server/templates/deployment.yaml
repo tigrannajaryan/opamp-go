@@ -1,0 +1,41 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ template "opamp-server.name" . }}
+  labels:
+    app: {{ template "opamp-server.name" . }}
+    component: opamp-server
+    release: {{ .Release.Name }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app: {{ template "opamp-server.name" . }}
+      component: opamp-server
+      release: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app: {{ template "opamp-server.name" . }}
+        component: opamp-server
+        release: {{ .Release.Name }}
+    spec:
+      containers:
+      - name: opamp-server
+        command:
+          - ./opampserver
+          - -listen
+          - {{ .Values.endpoint }}
+          - -protocol
+          - {{ .Values.protocol }}
+          {{- if .Values.usetls }} 
+          - -usetls
+          {{- end }}
+        image: {{ .Values.image.repository }}:{{ .Values.image.tag }}
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        ports:
+        - name: opamp
+          containerPort: 3465
+          protocol: TCP
+        resources:
+          {{- toYaml .Values.resources | nindent 10 }}

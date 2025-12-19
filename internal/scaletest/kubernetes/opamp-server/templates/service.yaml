@@ -1,0 +1,23 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ template "opamp-server.name" . }}
+  labels:
+    app: opamp-server
+    component: server
+  {{- if .Values.service.annotations }}
+  annotations:
+    {{ .Values.service.annotations | toYaml | nindent 4 }}
+  {{- end }}
+
+spec:
+  type: {{ .Values.service.type }}
+  ports:
+  - name: opamp
+    port: 3465
+    targetPort: opamp
+    protocol: TCP
+  selector:
+    app: {{ template "opamp-server.name" . }}
+    component: opamp-server
+    release: {{ .Release.Name }}

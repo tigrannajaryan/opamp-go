@@ -1,0 +1,37 @@
+# Number of pods to run.
+replicaCount: 8
+
+# OpAMP docker image configuration.
+image:
+  repository: tigran395/opamp
+  tag: latest
+  pullPolicy: Always
+
+# OpAMP server app container resources.
+resources:
+  requests:
+    cpu: "2"
+    memory: 8Gi
+  limits:
+    cpu: "2"
+    memory: 8Gi
+
+# OpAMP server app parameters.
+endpoint: 0.0.0.0:3465
+protocol: wssync
+usetls: false
+
+# OpAMP k8s service configuration.
+service:
+  # Service type
+  type: ClusterIP
+  # Use the following type to spin up a load balancer with your cloud provider.
+  # type: LoadBalancer
+
+  # Service annotations
+  annotations: {}
+    # The following attributes can be used to set up a AWS NLB in public 
+    # subnets.
+    # service.beta.kubernetes.io/aws-load-balancer-type: external
+    # service.beta.kubernetes.io/aws-load-balancer-nlb-target-type: ip
+    # service.beta.kubernetes.io/aws-load-balancer-scheme: internet-facing

@@ -1,0 +1,43 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ template "opamp-client.name" . }}
+  labels:
+    app: {{ template "opamp-client.name" . }}
+    component: opamp-client
+    release: {{ .Release.Name }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app: {{ template "opamp-client.name" . }}
+      component: opamp-client
+      release: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app: {{ template "opamp-client.name" . }}
+        component: opamp-client
+        release: {{ .Release.Name }}
+    spec:
+      containers:
+      - name: opamp-client
+        image: {{ .Values.image.repository }}:{{ .Values.image.tag }}
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        command:
+          - ./opamploadgen
+          - -protocol
+          - {{ .Values.protocol }} 
+          - -endpoint
+          - {{ .Values.endpoint }}
+          - -agents
+          - {{ .Values.agents | quote }} 
+          - -periods 
+          - {{ .Values.periods | quote }}
+          - -interval 
+          - {{ .Values.interval | quote }} 
+          {{- if .Values.usetls }} 
+          - -usetls
+          {{- end }}
+        resources:
+          {{- toYaml .Values.resources | nindent 10 }}

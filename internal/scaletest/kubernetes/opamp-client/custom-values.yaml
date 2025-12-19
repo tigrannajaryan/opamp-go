@@ -1,0 +1,25 @@
+# Number of pods to run.
+replicaCount: 20
+
+# OpAMP docker image configuration.
+image:
+  repository: tigran395/opamp
+  tag: latest
+  pullPolicy: Always
+
+# OpAMP load generator app container resources.
+resources:
+  requests:
+    cpu: 100m
+    memory: 400Mi
+  limits:
+    cpu: 100m
+    memory: 400Mi
+
+# OpAMP load generator app parameters.
+protocol: wssync
+endpoint:
+agents: 10000
+periods: 10000
+interval: 300
+usetls: false
